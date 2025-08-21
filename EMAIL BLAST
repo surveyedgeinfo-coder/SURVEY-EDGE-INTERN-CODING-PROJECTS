@@ -1,0 +1,96 @@
+import pandas as pd
+import yagmail
+
+# Read data
+df = pd.read_csv("ContactList - Sheet1 (6).csv")
+
+# Remove duplicates
+df.drop_duplicates(subset=["Name", "Email"], inplace=True)
+df.reset_index(drop=True, inplace=True)
+
+# clean up name
+def nameOrganizer(name_string):
+    if not isinstance(name_string, str) or name_string.strip() == "":
+        return "there"  # fallback
+
+    if ',' in name_string:
+        parts = name_string.split(',')
+        if len(parts) > 1 and parts[1].strip() != "":
+            name = parts[1].strip().split()[0]
+        else:
+            name = parts[0].strip().split()[0]
+    else:
+        name = name_string.strip().split()[0]
+
+    if name != "there":
+        return name.capitalize()
+    else:
+        return name
+
+# message template with HTML and hyperlink
+def createMessage(NAME):
+    name = nameOrganizer(NAME)
+    message = f"""
+    Hi {name}!
+
+    I hope this message finds you well!
+
+    My name is Kathleen Davis, and I’m reaching out to introduce you to Survey EDGE — a next-generation survey platform designed to help organizations like yours collect deeper, more actionable insights.
+
+    Unlike traditional tools, Survey EDGE goes beyond simple forms:
+
+    Engaging, gamified surveys that boost completion rates
+
+    Location-based insights through zip code mapping
+
+    Real-time data dashboards with instant visualization
+
+    Powerful analytics to help you make smarter decisions, faster
+
+    We’d love your input!
+    Click here to take our 2-minute survey: https://www.survey-edge.com/#/survey/invite/1205
+
+    Would you be open to a quick call or demo this week?
+
+    Looking forward to hearing from you!
+
+    To opt out of these messages, reply "Opt out".
+
+    Best regards,
+    Kathleen Davis
+    CEO: Survey EDGE | CEO: SMRI | Lecturer: UCSD Rady School of Management
+    """
+    return message
+
+# Initialize SMTP once
+yag = yagmail.SMTP("surveyedge.info@gmail.com", "oovh imbr cfwu izqt")
+
+# loop
+for index, row in df.iterrows():
+    if len(row) < 2:
+        print(f"Row {index} malformed, skipping.")
+        continue
+
+    name_cell = row.iloc[0]
+    email = row.iloc[1]
+
+    if not isinstance(email, str) or email.strip() == "":
+        print(f"Skipping row {index} due to missing email.")
+        continue
+
+    if isinstance(name_cell, str) and name_cell.strip() != "":
+        name = nameOrganizer(name_cell)
+    else:
+        name = "there"
+
+    print(f"Sending to {email} with name: {name}")
+
+    try:
+        yag.send(
+            to=email,
+            subject="Exploring a Potential Partnership",
+            contents=createMessage(name)
+        )
+        print(f"Sent to: {email}")
+    except Exception as e:
+        print(f"Failed to send to {email}: {e}")
