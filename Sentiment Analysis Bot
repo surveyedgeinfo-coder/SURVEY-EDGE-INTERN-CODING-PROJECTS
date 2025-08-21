@@ -1,0 +1,301 @@
+"""
+Sentiment Analysis Tool
+
+This script performs multi-layered sentiment analysis on arbitrary input text.
+It leverages:
+- VADER for rule-based sentiment
+- TextBlob for lexicon-based polarity scoring
+- spaCy for lemmatization and preprocessing
+- Custom text cleaning and normalization routines
+
+Final sentiment score is computed using a weighted combination of models,
+returning a polarity in the range [-1, 1].
+"""
+
+import os
+import re
+import string
+import emoji
+import logging
+import traceback
+import pandas as pd
+
+from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+import spacy
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load spaCy English model
+try:
+    logging.info("Loading spaCy English model...")
+    nlp = spacy.load("en_core_web_sm")
+    logging.info("spaCy model loaded successfully.")
+except Exception as e:
+    logging.error("Error loading spaCy model.")
+    traceback.print_exc()
+    raise e
+
+# Initialize VADER analyzer
+try:
+    logging.info("Initializing VADER SentimentIntensityAnalyzer...")
+    vader_analyzer = SentimentIntensityAnalyzer()
+    logging.info("VADER initialized.")
+except Exception as e:
+    logging.error("Failed to initialize VADER.")
+    traceback.print_exc()
+    raise e
+
+
+def remove_emojis(text: str) -> str:
+    """Removes all emojis from a string."""
+    logging.debug("Removing emojis...")
+    return emoji.replace_emoji(text, replace='')
+
+
+def remove_urls(text: str) -> str:
+    """Removes all URLs from a string."""
+    logging.debug("Removing URLs...")
+    return re.sub(r"http\S+|www\S+|https\S+", '', text, flags=re.MULTILINE)
+
+
+def remove_html_tags(text: str) -> str:
+    """Strips HTML tags."""
+    logging.debug("Removing HTML tags...")
+    return re.sub(r'<.*?>', '', text)
+
+
+def remove_punctuation(text: str) -> str:
+    """Removes all punctuation."""
+    logging.debug("Removing punctuation...")
+    return text.translate(str.maketrans('', '', string.punctuation))
+
+
+def normalize_whitespace(text: str) -> str:
+    """Collapses multiple spaces and trims edges."""
+    logging.debug("Normalizing whitespace...")
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def clean_text(text: str) -> str:
+    """Runs all text cleaning functions sequentially."""
+    logging.info("Cleaning input text...")
+    text = text.lower()
+    text = remove_emojis(text)
+    text = remove_urls(text)
+    text = remove_html_tags(text)
+    text = remove_punctuation(text)
+    text = normalize_whitespace(text)
+    logging.info("Text cleaned.")
+    return text
+
+
+def preprocess_text(text: str) -> str:
+    """
+    Lemmatizes text and removes stopwords/punctuation using spaCy.
+    """
+    logging.info("Preprocessing text using spaCy...")
+    try:
+        doc = nlp(text)
+        lemmatized_tokens = [
+            token.lemma_ for token in doc
+            if not token.is_stop and not token.is_punct and not token.like_num
+        ]
+        processed = ' '.join(lemmatized_tokens)
+        logging.info("Text preprocessed.")
+        return processed
+    except Exception as e:
+        logging.error("Preprocessing failed.")
+        traceback.print_exc()
+        return text  # fallback
+
+
+def get_vader_sentiment(text: str) -> float:
+    """
+    Computes compound VADER sentiment score.
+    """
+    logging.info("Computing VADER sentiment score...")
+    try:
+        scores = vader_analyzer.polarity_scores(text)
+        compound = scores['compound']
+        logging.info(f"VADER compound score: {compound}")
+        return compound
+    except Exception as e:
+        logging.error("VADER analysis failed.")
+        traceback.print_exc()
+        return 0.0
+
+
+def get_textblob_sentiment(text: str) -> float:
+    """
+    Computes TextBlob polarity.
+    """
+    logging.info("Computing TextBlob sentiment score...")
+    try:
+        blob = TextBlob(text)
+        polarity = blob.sentiment.polarity
+        logging.info(f"TextBlob polarity: {polarity}")
+        return polarity
+    except Exception as e:
+        logging.error("TextBlob analysis failed.")
+        traceback.print_exc()
+        return 0.0
+
+
+def compute_final_sentiment(vader_score: float, blob_score: float) -> float:
+    """
+    Weighted average of VADER and TextBlob scores.
+    """
+    logging.info("Combining sentiment scores...")
+    weight_vader = 0.6
+    weight_blob = 0.4
+    final_score = (weight_vader * vader_score + weight_blob * blob_score)
+    final_score_rounded = round(final_score, 3)
+    logging.info(f"Final combined sentiment score: {final_score_rounded}")
+    return final_score_rounded
+
+
+def analyze_sentiment(text: str) -> float:
+    """
+    High-level function to analyze the sentiment of a given text.
+    Returns a float in the range [-1, 1].
+    """
+    logging.info("Starting sentiment analysis pipeline...")
+    cleaned = clean_text(text)
+    preprocessed = preprocess_text(cleaned)
+    vader = get_vader_sentiment(preprocessed)
+    blob = get_textblob_sentiment(preprocessed)
+    final = compute_final_sentiment(vader, blob)
+    logging.info("Sentiment analysis complete.")
+    return final
+
+
+def pretty_output(text: str, score: float) -> None:
+    """Prints the result in a user-friendly format."""
+    sentiment_label = (
+        "Positive" if score > 0.3 else
+        "Negative" if score < -0.3 else
+        "Neutral"
+    )
+
+    print("\n" + "="*60)
+    print("Analyzed Text:")
+    print(f"> {text}")
+    print("\nSentiment Analysis Result:")
+    print(f"> Sentiment Score: {score} (range: -1 to 1)")
+    print(f"> Interpretation: {sentiment_label}")
+    print("="*60 + "\n")
+
+
+def Sentiment(input_text):
+    """Main execution entry point."""
+    logging.info("Program started.")
+    try:
+        input_text = input_text.strip()
+        if not input_text:
+            raise ValueError("Input cannot be empty.")
+        sentiment_score = analyze_sentiment(input_text)
+        pretty_output(input_text, sentiment_score)
+    except KeyboardInterrupt:
+        logging.warning("User aborted the program.")
+    except Exception as err:
+        logging.error("Unexpected error occurred.")
+        traceback.print_exc()
+
+def classify_sentiment(score: float) -> str:
+    """Classifies sentiment score into a label."""
+    if score > 0.3:
+        return "Positive"
+    elif score < -0.3:
+        return "Negative"
+    else:
+        return "Neutral"
+
+def analyze_emails(email_list):
+    """Analyzes a list of emails and exports results to CSV files."""
+    logging.info("Beginning analysis of email dataset...")
+
+    results = []
+
+    for idx, text in enumerate(email_list):
+        logging.info(f"Analyzing email {idx + 1}/{len(email_list)}...")
+        try:
+            cleaned = clean_text(text)
+            preprocessed = preprocess_text(cleaned)
+            vader_score = get_vader_sentiment(preprocessed)
+            blob_score = get_textblob_sentiment(preprocessed)
+            final_score = compute_final_sentiment(vader_score, blob_score)
+            sentiment_label = classify_sentiment(final_score)
+
+            results.append({
+                "Email": text,
+                "Cleaned Text": preprocessed,
+                "VADER Score": vader_score,
+                "TextBlob Score": blob_score,
+                "Final Score": final_score,
+                "Sentiment": sentiment_label
+            })
+        except Exception as e:
+            logging.error(f"Error analyzing email {idx + 1}: {e}")
+            traceback.print_exc()
+            continue
+
+    df = pd.DataFrame(results)
+
+    if df.empty:
+        logging.warning("No results to export.")
+        return
+
+    # Summary
+    mean_score = df["Final Score"].mean()
+    most_positive = df.loc[df["Final Score"].idxmax()]
+    most_negative = df.loc[df["Final Score"].idxmin()]
+    sentiment_counts = df["Sentiment"].value_counts()
+
+    # Add summary sheet
+    summary_data = {
+        "Total Emails": [len(df)],
+        "Mean Sentiment Score": [round(mean_score, 3)],
+        "Positive Emails": [sentiment_counts.get("Positive", 0)],
+        "Neutral Emails": [sentiment_counts.get("Neutral", 0)],
+        "Negative Emails": [sentiment_counts.get("Negative", 0)],
+        "Most Positive Email": [most_positive["Email"]],
+        "Most Positive Score": [most_positive["Final Score"]],
+        "Most Negative Email": [most_negative["Email"]],
+        "Most Negative Score": [most_negative["Final Score"]],
+    }
+
+    summary_df = pd.DataFrame(summary_data)
+
+    downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+    if not os.path.exists(downloads_path):
+        os.makedirs(downloads_path)
+
+    detailed_file = os.path.join(downloads_path, "sentiment_report_detailed.csv")
+    summary_file = os.path.join(downloads_path, "sentiment_report_summary.csv")
+
+    df.to_csv(detailed_file, index=False)
+    summary_df.to_csv(summary_file, index=False)
+
+    logging.info(f"Analysis complete. Detailed results saved to {detailed_file}")
+    logging.info(f"Summary saved to {summary_file}")
+    print(f"Detailed results saved to: {detailed_file}")
+    print(f"Summary saved to: {summary_file}")
+
+
+test_emails = [
+    "I absolutely loved the service. The team was so helpful!",
+    "I really hated the experience. Nothing worked, and support was slow.",
+    "It's okay, nothing special honestly.",
+    "Thanks for the update. The new version runs smoother.",
+    "I’m extremely disappointed. The latest release is full of bugs.",
+    "Great job on the recent improvements, very impressed!",
+    "The wait time was too long, not happy with the delay.",
+    "Customer support was friendly and resolved my issue quickly.",
+    "The product quality has declined recently.",
+    "I am neutral about the new features."
+]
+
+analyze_emails(test_emails)
