@@ -1,0 +1,119 @@
+import schedule
+import time
+import datetime
+import yagmail
+def run_email_tracker():
+  import imaplib
+  import email
+  import email.header
+  from email.header import decode_header
+
+  Email = "kbaker111404@gmail.com"
+  Password = "hana mbev pdkr pwew"
+
+  mail = imaplib.IMAP4_SSL("imap.gmail.com")
+  mail.login(Email, Password)
+  print ("logged in")
+
+  # identifies mail in the sent mail area of my program
+  mail.select('"[Gmail]/Sent Mail"')
+
+  Date_Range = (datetime.date.today() -   datetime.timedelta(days=7)).strftime("%d-%b-%Y")
+
+  print(Date_Range)
+
+  #searches my email 
+  sent_data = mail.search(None, f"SINCE {Date_Range}")
+  split_data = sent_data[0].split()
+  sent_count = len(split_data)
+
+  print(f"The amount of emails sen this week:{sent_count}")
+
+
+  # Now we count how many are in the replies! Mail.select scans and     looks into a file within gmai
+
+
+  mail.select("inbox")
+
+  recieve_data = mail.search(None, f"SINCE {Date_Range}")
+  recv_ids = recieve_data[0].split()
+  recv_count = len(recv_ids)
+  print (f"The amount of emails recieved this week: {recv_count}")
+  if sent_count == 0:
+    print ("No emails were sent")
+
+  else:
+    response_rate = (recv_count/sent_count) * 100
+    print(f"Response Rate: {response_rate}")
+  
+  message = f"""
+
+  Hello, 
+
+  Here’s the email engagement summary for the past 7 days:
+
+  Emails Sent: {sent_count}
+
+  Replies Received: {recv_count}
+
+  Response Rate: {response_rate}
+
+  This gives us a clearer picture of how our outreach is performing and which subject lines or audience segments may be driving better engagement. Let me know if you’d like me to break it down further by day or campaign type.
+
+  Best,
+  Kathleen Davis
+  Survey EDGE | Marketing & Insights  
+  1-954-389-9095
+
+  """
+  return message
+
+  
+
+  
+  # Section that causes it to be run at a certain select time per   week. 
+
+schedule.every().friday.at("17:00").do(run_email_tracker)
+
+
+
+while True:
+  now = datetime.datetime.now()
+  if now.weekday() == 4 and now.hour == 17:
+    message = run_email_tracker()
+    time.sleep(3600)
+    yag = yagmail.SMTP("kbaker111404@gmail.com", "hana mbev pdkr pwew")
+    Email_to_Send = input("What is the email you'd like the report sent to?")
+    yag.send(
+      to=Email_to_Send,
+      subject="Weekly Response Rate Report",
+      contents=message
+      
+    )
+    
+  
+  else:
+    print("Now is not the allocated time, and as a result will not run.")
+    time.sleep(10)
+
+    #this like lowkey basically says if true (function running) check to see if it's time to execute our bit of code.
+    schedule.run_pending()
+    time.sleep(10)
+
+
+
+# parse text in the email. 
+# I lowkey have no idea how to parse it, so this is what i copied from chat GPT
+for num in email_ids[-5:]:
+  _, data = mail.fetch(num, "(RFC822)")
+  msg = email.message_from_bytes(data[0][1])
+
+  # Directly get the HTML part (or fallback to entire payload)
+  for part in msg.walk():
+      if part.get_content_type() == "text/html":
+          html = part.get_payload(decode=True).decode(errors="ignore")
+          print("\n--- HTML BODY START ---\n")
+          print(html)
+          print("\n--- HTML BODY END ---\n")
+          break
+
